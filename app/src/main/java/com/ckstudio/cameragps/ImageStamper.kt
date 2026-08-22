@@ -11,6 +11,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.*
+import androidx.core.graphics.withClip
 
 /**
  * Stamps a GPS location banner onto a photo bitmap, matching the reference design:
@@ -26,7 +27,8 @@ object ImageStamper {
         locationData: LocationData,
         countryFlag: String,
         mapTileBitmap: Bitmap? = null,
-        horizontalScale: Float = 1f,
+        leftScale: Float = 1f,
+        rightScale: Float = 1f,
         bottomScale: Float = 1f,
         gapScale: Float = 1f,
         heightScale: Float = 1f
@@ -37,18 +39,20 @@ object ImageStamper {
         val result = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(result)
 
+        // --- Configure your margins here (as a percentage of image width) ---
+        // For example, 0.045f means 4.5% of the total image width.
+        val leftMargin = (width * 0.045f) * leftScale
+        val rightMargin = (width * 0.045f) * rightScale
+        val bottomMargin = (width * 0.06f) * bottomScale
+        
         // Banner dimensions — ~31% of image height for more text room
         val bannerHeight = (height * 0.31f * heightScale).toInt()
-        val bannerTop = height - bannerHeight
-        val basePadding = width * 0.025f
-        val padding = basePadding * horizontalScale
-        val bottomPadding = (basePadding * 1.5f) * bottomScale  // extra bottom padding
-        val gap = (basePadding * 0.8f) * gapScale // Gap between map and text banner
+        val gap = (width * 0.03f) * gapScale // Gap between map and text banner
 
         // Map thumbnail (left side)
-        val thumbSize = (bannerHeight - basePadding - bottomPadding).toInt()
-        val thumbLeft = padding
-        val thumbTop = bannerTop + basePadding
+        val thumbSize = (bannerHeight * 0.7f).toInt() // Stable size independent of margins
+        val thumbTop = height - bottomMargin - thumbSize
+        val thumbLeft = leftMargin
 
         if (mapTileBitmap != null) {
             val mapRect = RectF(thumbLeft, thumbTop, thumbLeft + thumbSize, thumbTop + thumbSize)
@@ -59,39 +63,37 @@ object ImageStamper {
             val clipPath = Path().apply {
                 addRoundRect(mapRect, cornerRadius, cornerRadius, Path.Direction.CW)
             }
-            canvas.save()
-            canvas.clipPath(clipPath)
-            
-            // Draw real map tile
-            canvas.drawBitmap(mapTileBitmap, srcRect, mapRect, Paint(Paint.ANTI_ALIAS_FLAG))
-            
-            // Draw "Google" text centered at bottom with black stroke
-            val googlePaintStroke = Paint().apply {
-                color = Color.BLACK
-                textSize = thumbSize * 0.18f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                isAntiAlias = true
-                style = Paint.Style.STROKE
-                strokeWidth = thumbSize * 0.02f
-            }
-            val googlePaintFill = Paint().apply {
-                color = Color.WHITE
-                textSize = thumbSize * 0.18f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                isAntiAlias = true
-                style = Paint.Style.FILL
-            }
-            val textWidth = googlePaintFill.measureText("Google")
-            val textX = thumbLeft + (thumbSize - textWidth) / 2f
-            val textY = thumbTop + thumbSize - thumbSize * 0.08f // Bottom-center
+            canvas.withClip(clipPath) {
+                // Draw real map tile
+                drawBitmap(mapTileBitmap, srcRect, mapRect, Paint(Paint.ANTI_ALIAS_FLAG))
 
-            canvas.drawText("Google", textX, textY, googlePaintStroke)
-            canvas.drawText("Google", textX, textY, googlePaintFill)
-            
-            // Draw red pin on top of real map
-            drawPinOnMap(canvas, thumbLeft, thumbTop, thumbSize.toFloat())
-            
-            canvas.restore()
+                // Draw "Google" text centered at bottom with black stroke
+                val googlePaintStroke = Paint().apply {
+                    color = Color.BLACK
+                    textSize = thumbSize * 0.18f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                    style = Paint.Style.STROKE
+                    strokeWidth = thumbSize * 0.02f
+                }
+                val googlePaintFill = Paint().apply {
+                    color = Color.WHITE
+                    textSize = thumbSize * 0.18f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                    style = Paint.Style.FILL
+                }
+                val textWidth = googlePaintFill.measureText("Google")
+                val textX = thumbLeft + (thumbSize - textWidth) / 2f
+                val textY = thumbTop + thumbSize - thumbSize * 0.08f // Bottom-center
+
+                drawText("Google", textX, textY, googlePaintStroke)
+                drawText("Google", textX, textY, googlePaintFill)
+
+                // Draw red pin on top of real map
+                drawPinOnMap(this, thumbLeft, thumbTop, thumbSize.toFloat())
+
+            }
 
             // Border around the clipped map
             val borderPaint = Paint().apply {
@@ -102,12 +104,12 @@ object ImageStamper {
             }
             canvas.drawRoundRect(mapRect, cornerRadius, cornerRadius, borderPaint)
         } else {
-            drawMapThumbnail(canvas, thumbLeft, thumbTop, thumbSize.toFloat())
+            drawMapThumbnail(canvas, leftMargin, thumbTop, thumbSize.toFloat())
         }
 
         // Text area background
         val textLeft = thumbLeft + thumbSize + gap
-        val textRight = width - padding
+        val textRight = width - rightMargin
         
         val bgPaint = Paint().apply {
             color = Color.argb(165, 0, 0, 0) // ~65% opacity
@@ -117,15 +119,24 @@ object ImageStamper {
         val textBgRect = RectF(textLeft, thumbTop, textRight, thumbTop + thumbSize)
         val textCornerRadius = thumbSize * 0.08f // Dynamic radius
         canvas.drawRoundRect(textBgRect, textCornerRadius, textCornerRadius, bgPaint)
+        
+        // Fill the top-right corner to make it square so the tab connects seamlessly
+        val topRightSquareRect = RectF(
+            textBgRect.right - textCornerRadius,
+            textBgRect.top,
+            textBgRect.right,
+            textBgRect.top + textCornerRadius
+        )
+        canvas.drawRect(topRightSquareRect, bgPaint)
 
         // Text padding inside the rounded rectangle
-        val textInnerPadding = basePadding * 0.5f // Use unscaled padding for inner layout
+        val textInnerPadding = thumbSize * 0.1f // Stable inner padding
         val textStartX = textLeft + textInnerPadding
 
         // Scale text sizes relative to thumbnail (which scales with banner)
-        val brandingSize = thumbSize * 0.09f
-        val nameSize = thumbSize * 0.15f
-        val detailSize = thumbSize * 0.11f
+        val brandingSize = thumbSize * 0.10f
+        val nameSize = thumbSize * 0.17f
+        val detailSize = thumbSize * 0.13f
 
         // --- Setup Paints ---
         val brandingPaint = android.text.TextPaint().apply {
@@ -174,23 +185,46 @@ object ImageStamper {
             }
         }
 
-        // Calculate total text block height using final scaled sizes
-        val lineSpacing = basePadding * 0.35f
-        val totalTextHeight = brandingPaint.textSize + namePaint.textSize + (detailPaint.textSize * 3) + (lineSpacing * 4)
+        // Calculate total text block height using final scaled sizes (excluding branding which is outside)
+        val lineSpacing = thumbSize * 0.06f // Stable line spacing
+        val totalTextHeight = namePaint.textSize + (detailPaint.textSize * 3) + (lineSpacing * 3)
         
-        // Starting Y position to perfectly center the text vertically in the background
-        var currentY = thumbTop + (thumbSize.toFloat() - totalTextHeight) / 2f + brandingPaint.textSize
-
-        // 1. Branding (top-right)
+        // 1. Branding (top-right, drawn ABOVE the background box)
         val brandingWidth = brandingPaint.measureText(brandingText)
+        val brandingPaddingY = thumbSize * 0.04f
+        val brandingPaddingX = thumbSize * 0.08f
+        val brandingHeight = brandingPaint.textSize + (brandingPaddingY * 2)
+        
+        // Draw the branding background tab
+        val brandingBgRect = RectF(
+            textRight - brandingWidth - (brandingPaddingX * 2),
+            thumbTop - brandingHeight,
+            textRight,
+            thumbTop
+        )
+        val brandingCornerRadius = thumbSize * 0.06f
+        canvas.drawRoundRect(brandingBgRect, brandingCornerRadius, brandingCornerRadius, bgPaint)
+        
+        // Fill the bottom half of the branding tab to make it flat where it touches the main banner
+        val brandingBottomSquare = RectF(
+            brandingBgRect.left,
+            brandingBgRect.bottom - brandingCornerRadius,
+            brandingBgRect.right,
+            brandingBgRect.bottom
+        )
+        canvas.drawRect(brandingBottomSquare, bgPaint)
+
+        // Draw branding text inside its tab
+        val brandingY = brandingBgRect.bottom - brandingPaddingY
         canvas.drawText(
             brandingText,
-            textRight - textInnerPadding - brandingWidth,
-            currentY,
+            brandingBgRect.right - brandingPaddingX - brandingWidth,
+            brandingY,
             brandingPaint
         )
-        
-        currentY += namePaint.textSize + lineSpacing
+
+        // Starting Y position to perfectly center the remaining text vertically in the background
+        var currentY = thumbTop + (thumbSize.toFloat() - totalTextHeight) / 2f + namePaint.textSize
 
         // 2. Location name
         canvas.drawText(nameText, textStartX, currentY, namePaint)

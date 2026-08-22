@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -37,6 +39,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -278,7 +282,7 @@ fun GPSCameraApp() {
                             locationData = null
                             mapTileBitmap = null
                         },
-                        onSave = { updatedData ->
+                        onSave = { updatedData, lScale, rScale, bScale ->
                             isSaving = true
                             scope.launch {
                                 val stamped = withContext(Dispatchers.Default) {
@@ -286,7 +290,10 @@ fun GPSCameraApp() {
                                         originalBitmap = capturedBitmap!!,
                                         locationData = updatedData,
                                         countryFlag = countryCodeToFlag(updatedData.countryCode),
-                                        mapTileBitmap = mapTileBitmap
+                                        mapTileBitmap = mapTileBitmap,
+                                        leftScale = lScale,
+                                        rightScale = rScale,
+                                        bottomScale = bScale
                                     )
                                 }
                                 val fileName = "GPS_${
@@ -485,13 +492,17 @@ fun PreviewScreen(
     mapTileBitmap: Bitmap?,
     isSaving: Boolean,
     onRetake: () -> Unit,
-    onSave: (updatedLocationData: LocationData) -> Unit
+    onSave: (updatedLocationData: LocationData, leftMargin: Float, rightMargin: Float, bottomMargin: Float) -> Unit
 ) {
     val context = LocalContext.current
     var currentData by remember { mutableStateOf(locationData) }
     var rawLat by remember { mutableStateOf(locationData.latitude.toString()) }
     var rawLng by remember { mutableStateOf(locationData.longitude.toString()) }
     var selectedDate by remember { mutableStateOf(Date(locationData.timestamp)) }
+
+    var leftMarginScale by remember { mutableFloatStateOf(1f) }
+    var rightMarginScale by remember { mutableFloatStateOf(1f) }
+    var bottomMarginScale by remember { mutableFloatStateOf(1f) }
 
     LaunchedEffect(rawLat, rawLng, selectedDate) {
         val lat = rawLat.toDoubleOrNull()
@@ -539,6 +550,9 @@ fun PreviewScreen(
                 bitmap = bitmap,
                 locationData = currentData,
                 mapTileBitmap = mapTileBitmap,
+                leftMarginScale = leftMarginScale,
+                rightMarginScale = rightMarginScale,
+                bottomMarginScale = bottomMarginScale,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -549,7 +563,29 @@ fun PreviewScreen(
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.5f))
                 .padding(horizontal = 20.dp, vertical = 8.dp)
+                .heightIn(max = 280.dp)
+                .verticalScroll(rememberScrollState())
         ) {
+            Text("Left Margin (${"%.1f".format(leftMarginScale)}x)", color = Color.White, fontSize = 12.sp)
+            Slider(
+                value = leftMarginScale,
+                onValueChange = { leftMarginScale = it },
+                valueRange = 0f..3f
+            )
+
+            Text("Right Margin (${"%.1f".format(rightMarginScale)}x)", color = Color.White, fontSize = 12.sp)
+            Slider(
+                value = rightMarginScale,
+                onValueChange = { rightMarginScale = it },
+                valueRange = 0f..3f
+            )
+
+            Text("Bottom Margin (${"%.1f".format(bottomMarginScale)}x)", color = Color.White, fontSize = 12.sp)
+            Slider(
+                value = bottomMarginScale,
+                onValueChange = { bottomMarginScale = it },
+                valueRange = 0f..3f
+            )
             OutlinedTextField(
                 value = rawLat,
                 onValueChange = { rawLat = it },
@@ -630,7 +666,7 @@ fun PreviewScreen(
 
             // Save button
             Button(
-                onClick = { onSave(currentData) },
+                onClick = { onSave(currentData, leftMarginScale, rightMarginScale, bottomMarginScale) },
                 enabled = !isSaving,
                 modifier = Modifier
                     .weight(1.5f)

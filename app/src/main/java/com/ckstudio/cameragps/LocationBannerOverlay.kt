@@ -4,7 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,19 +23,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.StrokeJoin
 
 /**
  * Composable that displays a captured photo with a GPS location banner overlaid
@@ -36,13 +46,17 @@ fun LocationBannerOverlay(
     bitmap: Bitmap,
     locationData: LocationData,
     mapTileBitmap: Bitmap? = null,
-    horizontalScale: Float = 1f,
-    bottomScale: Float = 1f,
-    gapScale: Float = 1f,
-    heightScale: Float = 1f,
+    leftMarginScale: Float = 1f,
+    rightMarginScale: Float = 1f,
+    bottomMarginScale: Float = 1f,
     modifier: Modifier = Modifier
 ) {
     val flag = countryCodeToFlag(locationData.countryCode)
+
+    // --- Configure your margins here ---
+    val leftMargin = 32.dp * leftMarginScale
+    val rightMargin = 32.dp * rightMarginScale
+    val bottomMargin = 34.dp * bottomMarginScale
 
     Box(modifier = modifier) {
         // Captured photo
@@ -59,16 +73,16 @@ fun LocationBannerOverlay(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(
-                    start = 18.dp * horizontalScale,
-                    end = 18.dp * horizontalScale,
-                    bottom = 34.dp * bottomScale
+                    start = leftMargin,
+                    end = rightMargin,
+                    bottom = bottomMargin
                 ),
             verticalAlignment = Alignment.Bottom
         ) {
             // Map thumbnail — real satellite tile or placeholder
             Box(
                 modifier = Modifier
-                    .size(105.dp * heightScale) // Dynamic height/width based on scale
+                    .size(105.dp) // Dynamic height/width based on scale
                     .clip(RoundedCornerShape(24.dp))
                     .background(Color.Gray)
             ) {
@@ -109,31 +123,41 @@ fun LocationBannerOverlay(
                 }
             }
 
-            Spacer(Modifier.width(10.dp * gapScale))
+            Spacer(Modifier.width(10.dp))
 
-            // Text information with its own dark background
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(
-                        color = Color.Black.copy(alpha = 0.65f), // Lower opacity for better look
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 24.dp * heightScale), // Dynamic vertical padding
-                verticalArrangement = Arrangement.Center // Vertically center the text
-            ) {
-                // GPS Map Camera branding (top-right)
+            // Text column containing branding and location details
+            Column(modifier = Modifier.weight(1f)) {
+                
+                // GPS Map Camera branding (top-right, outside background)
                 Text(
                     text = "\uD83D\uDDFA GPS Map Camera",
                     style = TextStyle(
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    modifier = Modifier.align(Alignment.End),
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .background(
+                            color = Color.Black.copy(alpha = 0.65f),
+                            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                
+                // Text information with its own dark background
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = Color.Black.copy(alpha = 0.65f), // Lower opacity for better look
+                            shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp, topEnd = 0.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 24.dp), // Dynamic vertical padding
+                    verticalArrangement = Arrangement.Center // Vertically center the text
+                ) {
 
                 Spacer(Modifier.height(4.dp))
 
@@ -142,7 +166,7 @@ fun LocationBannerOverlay(
                     text = "${locationData.locationName} $flag",
                     style = TextStyle(
                         color = Color.White,
-                        fontSize = 17.sp,
+                        fontSize = 19.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 2,
@@ -156,7 +180,7 @@ fun LocationBannerOverlay(
                     text = locationData.fullAddress,
                     style = TextStyle(
                         color = Color.White,
-                        fontSize = 12.sp
+                        fontSize = 13.sp
                     ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -169,7 +193,7 @@ fun LocationBannerOverlay(
                     text = "Lat ${locationData.latString} Long ${locationData.longString}",
                     style = TextStyle(
                         color = Color.White,
-                        fontSize = 12.sp
+                        fontSize = 13.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -182,12 +206,12 @@ fun LocationBannerOverlay(
                     text = locationData.formattedDateTime,
                     style = TextStyle(
                         color = Color.White,
-                        fontSize = 12.sp
+                        fontSize = 13.sp
                     ),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
             }
+            } // Close wrapper column
         }
     }
 }
