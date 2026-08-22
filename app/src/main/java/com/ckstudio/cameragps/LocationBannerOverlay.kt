@@ -129,13 +129,7 @@ fun LocationBannerOverlay(
             Column(modifier = Modifier.weight(1f)) {
                 
                 // GPS Map Camera branding (top-right, outside background)
-                Text(
-                    text = "\uD83D\uDDFA GPS Map Camera",
-                    style = TextStyle(
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                Row(
                     modifier = Modifier
                         .align(Alignment.End)
                         .background(
@@ -143,9 +137,25 @@ fun LocationBannerOverlay(
                             shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = androidx.compose.ui.res.painterResource(id = R.mipmap.ic_launcher),
+                        contentDescription = "App Icon",
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "GPS Map Camera",
+                        style = TextStyle(
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 
                 // Text information with its own dark background
                 Column(

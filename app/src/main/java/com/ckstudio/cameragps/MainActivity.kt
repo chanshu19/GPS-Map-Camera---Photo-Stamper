@@ -286,11 +286,13 @@ fun GPSCameraApp() {
                             isSaving = true
                             scope.launch {
                                 val stamped = withContext(Dispatchers.Default) {
+                                    val appIconBitmap = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
                                     ImageStamper.stampBanner(
                                         originalBitmap = capturedBitmap!!,
                                         locationData = updatedData,
                                         countryFlag = countryCodeToFlag(updatedData.countryCode),
                                         mapTileBitmap = mapTileBitmap,
+                                        appIconBitmap = appIconBitmap,
                                         leftScale = lScale,
                                         rightScale = rScale,
                                         bottomScale = bScale

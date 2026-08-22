@@ -27,6 +27,7 @@ object ImageStamper {
         locationData: LocationData,
         countryFlag: String,
         mapTileBitmap: Bitmap? = null,
+        appIconBitmap: Bitmap? = null,
         leftScale: Float = 1f,
         rightScale: Float = 1f,
         bottomScale: Float = 1f,
@@ -190,14 +191,22 @@ object ImageStamper {
         val totalTextHeight = namePaint.textSize + (detailPaint.textSize * 3) + (lineSpacing * 3)
         
         // 1. Branding (top-right, drawn ABOVE the background box)
-        val brandingWidth = brandingPaint.measureText(brandingText)
+        val brandingTextOnlyWidth = brandingPaint.measureText("GPS Map Camera") // Text without emoji
+        val iconSize = brandingPaint.textSize * 1.2f
+        val iconGap = thumbSize * 0.04f
+        val totalBrandingWidth = if (appIconBitmap != null) {
+            brandingTextOnlyWidth + iconSize + iconGap
+        } else {
+            brandingPaint.measureText(brandingText)
+        }
+
         val brandingPaddingY = thumbSize * 0.04f
         val brandingPaddingX = thumbSize * 0.08f
         val brandingHeight = brandingPaint.textSize + (brandingPaddingY * 2)
         
         // Draw the branding background tab
         val brandingBgRect = RectF(
-            textRight - brandingWidth - (brandingPaddingX * 2),
+            textRight - totalBrandingWidth - (brandingPaddingX * 2),
             thumbTop - brandingHeight,
             textRight,
             thumbTop
@@ -214,14 +223,29 @@ object ImageStamper {
         )
         canvas.drawRect(brandingBottomSquare, bgPaint)
 
-        // Draw branding text inside its tab
+        // Draw branding icon and text inside its tab
         val brandingY = brandingBgRect.bottom - brandingPaddingY
-        canvas.drawText(
-            brandingText,
-            brandingBgRect.right - brandingPaddingX - brandingWidth,
-            brandingY,
-            brandingPaint
-        )
+        
+        if (appIconBitmap != null) {
+            val iconLeft = brandingBgRect.right - brandingPaddingX - totalBrandingWidth
+            val iconTop = brandingBgRect.top + (brandingHeight - iconSize) / 2f
+            val iconRect = RectF(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize)
+            canvas.drawBitmap(appIconBitmap, null, iconRect, null)
+            
+            canvas.drawText(
+                "GPS Map Camera",
+                iconRect.right + iconGap,
+                brandingY,
+                brandingPaint
+            )
+        } else {
+            canvas.drawText(
+                brandingText,
+                brandingBgRect.right - brandingPaddingX - totalBrandingWidth,
+                brandingY,
+                brandingPaint
+            )
+        }
 
         // Starting Y position to perfectly center the remaining text vertically in the background
         var currentY = thumbTop + (thumbSize.toFloat() - totalTextHeight) / 2f + namePaint.textSize
