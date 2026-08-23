@@ -319,7 +319,7 @@ object ImageStamper {
      */
     fun downloadMapTile(latitude: Double, longitude: Double): Bitmap? {
         return try {
-            val zoom = 16
+            val zoom = 18
             val n = (1 shl zoom).toDouble()
             val xTile = ((longitude + 180.0) / 360.0 * n).toInt()
             val latRad = Math.toRadians(latitude)
