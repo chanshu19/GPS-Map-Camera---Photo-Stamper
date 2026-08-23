@@ -1,12 +1,16 @@
 package com.ckstudio.cameragps
 
 import android.Manifest
+import android.content.Context
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -88,6 +92,24 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Setup crash logger
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, exception ->
+            try {
+                val logFile = java.io.File(getExternalFilesDir(null), "logger.txt")
+                val writer = java.io.FileWriter(logFile, true)
+                writer.append("\n--- CRASH: ${java.util.Date()} ---\n")
+                val printWriter = java.io.PrintWriter(writer)
+                exception.printStackTrace(printWriter)
+                printWriter.flush()
+                writer.close()
+            } catch (e: Exception) {
+                // Ignore, we are already crashing
+            }
+            defaultHandler?.uncaughtException(thread, exception)
+        }
+
         enableEdgeToEdge()
         setContent {
             CameraGPSTheme {
@@ -126,6 +148,20 @@ fun GPSCameraApp() {
         )
     }
 
+    fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
     // Shared logic to process a photo (load bitmap + fetch location)
     fun processPhoto(uri: Uri) {
         isLoading = true
@@ -133,8 +169,14 @@ fun GPSCameraApp() {
         scope.launch {
             try {
                 val bitmap = withContext(Dispatchers.IO) {
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     context.contentResolver.openInputStream(uri)?.use {
-                        BitmapFactory.decodeStream(it)
+                        BitmapFactory.decodeStream(it, null, options)
+                    }
+                    options.inSampleSize = calculateInSampleSize(options, 3000, 3000)
+                    options.inJustDecodeBounds = false
+                    context.contentResolver.openInputStream(uri)?.use {
+                        BitmapFactory.decodeStream(it, null, options)
                     }
                 }
                 capturedBitmap = bitmap
@@ -285,32 +327,61 @@ fun GPSCameraApp() {
                         onSave = { updatedData, lScale, rScale, bScale ->
                             isSaving = true
                             scope.launch {
-                                val stamped = withContext(Dispatchers.Default) {
-                                    val appIconBitmap = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
-                                    ImageStamper.stampBanner(
-                                        originalBitmap = capturedBitmap!!,
-                                        locationData = updatedData,
-                                        countryFlag = countryCodeToFlag(updatedData.countryCode),
-                                        mapTileBitmap = mapTileBitmap,
-                                        appIconBitmap = appIconBitmap,
-                                        leftScale = lScale,
-                                        rightScale = rScale,
-                                        bottomScale = bScale
+                                try {
+                                    val stamped = withContext(Dispatchers.Default) {
+                                        val appIconBitmap = try {
+                                            BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            null
+                                        }
+                                        ImageStamper.stampBanner(
+                                            originalBitmap = capturedBitmap!!,
+                                            locationData = updatedData,
+                                            countryFlag = countryCodeToFlag(updatedData.countryCode),
+                                            mapTileBitmap = mapTileBitmap,
+                                            appIconBitmap = appIconBitmap,
+                                            leftScale = lScale,
+                                            rightScale = rScale,
+                                            bottomScale = bScale
+                                        )
+                                    }
+                                    val fileName = "GPS_${
+                                        SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(Date())
+                                    }.jpg"
+                                    
+                                    val contentValues = ContentValues().apply {
+                                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                                        }
+                                    }
+
+                                    val uri = context.contentResolver.insert(
+                                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                        contentValues
                                     )
+                                    uri?.let {
+                                        context.contentResolver.openOutputStream(it)?.use { out ->
+                                            stamped.compress(Bitmap.CompressFormat.JPEG, 100, out)
+                                        }
+                                    }
+
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Saved to Pictures!", Toast.LENGTH_SHORT).show()
+                                        capturedBitmap = null
+                                        locationData = null
+                                        mapTileBitmap = null
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Failed to save: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                } finally {
+                                    isSaving = false
                                 }
-                                val fileName = "GPS_${
-                                    SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH)
-                                        .format(Date())
-                                }.jpg"
-                                val saved = withContext(Dispatchers.IO) {
-                                    ImageStamper.saveToGallery(context, stamped, fileName)
-                                }
-                                isSaving = false
-                                Toast.makeText(
-                                    context,
-                                    if (saved) "✅ Saved to Gallery/GPS Camera!" else "❌ Failed to save",
-                                    Toast.LENGTH_SHORT
-                                ).show()
                             }
                         }
                     )
