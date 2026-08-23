@@ -97,6 +97,11 @@ class LocationHelper(private val context: Context) {
                 countryCode = addr.countryCode ?: ""
                 postalCode = addr.postalCode ?: ""
                 subLocality = addr.subLocality ?: addr.featureName ?: cityName
+                
+                // Google Geocoder sometimes returns Plus Codes (e.g. 2RR2+8VG) as the feature name
+                // in rural areas. We filter them out so they don't clutter the readable address.
+                if (cityName.contains("+")) cityName = ""
+                if (subLocality.contains("+")) subLocality = ""
             }
         } catch (e: Exception) {
             e.printStackTrace()
